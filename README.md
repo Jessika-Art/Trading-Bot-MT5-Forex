@@ -1,5 +1,4 @@
-# The_River_Algorithmic_Trading_Bot
-Algorithm Trading Bot for MetaTrader 5 ( Python )
+# Algorithm Trading Bot for MetaTrader 5 ( Python )
 
 This algorithm trades in the Forex market on the Meta Trader 5 plaform.
 
