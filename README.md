@@ -6,5 +6,7 @@ Inside there are different indicators all written from scratch without using any
 "Done for you" library.
 
 On the top of each function there is "on" or "off" that tell you that
-that function is currently selected and used for a strategy.
+that function is currently selected and used for the strategy.
+
+Feel free to modify and test the code
 
