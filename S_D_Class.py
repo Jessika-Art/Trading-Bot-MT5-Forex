@@ -17,8 +17,8 @@ class River:
         # self.server = 'ICMarketsSC_Demo'
         # mt5.login(self.login, self.password, self.server)
         self.SYMBOL = 'EURUSD'
-        # self.Atr_Perc_tp = 2.8 
-        self.Atr_Perc_sl = 2.0 
+        self.Atr_Perc_tp = 2.2 
+        self.Atr_Perc_sl = 1.6 
         self.TIMEFRAME_15M = mt5.TIMEFRAME_M15
         self.TIMEFRAME_5M = mt5.TIMEFRAME_M5 # this the being used
         self.TIMEFRAME_1H = mt5.TIMEFRAME_H1
@@ -58,9 +58,8 @@ class River:
 
 
     # GET DATA (on)
-    def Historical(self):
+    def Historical(self, SYMBOL):
         # Get data from now to back by the numbers of candles
-        SYMBOL = self.SYMBOL
 
         number_of_candles = 500
         looknow = int(datetime.utcnow().timestamp())
@@ -96,7 +95,7 @@ class River:
     # BULLISH ENGULFING (off)
     def Bull_Eng(self, SYMBOL):
         self.SYMBOL = SYMBOL
-        df = self.Historical()
+        df = self.Historical(SYMBOL)
         Bullish_Engulfing = df['close'].iloc[-2] > df['open'].iloc[-3] and df['open'].iloc[-2] <= df['close'].iloc[-3] and (0.8 * 0.9) > 0.8 and \
                             df['close'].iloc[-3] < df['open'].iloc[-3] and df['close'].iloc[-2] > df['open'].iloc[-2] and df['high'].iloc[-2] > df['high'].iloc[-3]
         
@@ -105,7 +104,7 @@ class River:
     # BEARISH ENGULFING (off)
     def Bear_Eng(self, SYMBOL):
         self.SYMBOL = SYMBOL
-        df = self.Historical()
+        df = self.Historical(SYMBOL)
         Bearish_Engulfing = df['close'].iloc[-2] < df['open'].iloc[-3] and df['open'].iloc[-2] >= df['close'].iloc[-3] and (0.8 * 0.9) < 0.8 and \
                             df['close'].iloc[-3] > df['open'].iloc[-3] and df['close'].iloc[-2] < df['open'].iloc[-2] and df['low'].iloc[-2] < df['low'].iloc[-3]       
 
@@ -115,8 +114,8 @@ class River:
     ''' I N D I C A T O R S '''
 
     # Avarage True Range (on)
-    def ATR(self):
-        df = self.Historical()
+    def ATR(self, SYMBOL):
+        df = self.Historical(SYMBOL)
         # ATR
         df['H-L'] = abs(df['high'] - df['low'])
         df['H-PC'] = abs(df['high'] - df['close'].shift(1))
@@ -127,18 +126,18 @@ class River:
 
         # Take Profit and Stop Loss for Long position
         SL_buy = df['close'].iloc[-2] - (df['ATR'].iloc[-2] * self.Atr_Perc_sl)
-        # TP_buy = df['close'].iloc[-2] + (df['ATR'].iloc[-2] * self.Atr_Perc_tp)
+        TP_buy = df['close'].iloc[-2] + (df['ATR'].iloc[-2] * self.Atr_Perc_tp)
 
         # Take Profit and Stop Loss for Short position
-        # TP_sell = df['close'].iloc[-2] - (df['ATR'].iloc[-2] * self.Atr_Perc_tp)
+        TP_sell = df['close'].iloc[-2] - (df['ATR'].iloc[-2] * self.Atr_Perc_tp)
         SL_sell = df['close'].iloc[-2] + (df['ATR'].iloc[-2] * self.Atr_Perc_sl)
 
-        return ([SL_buy, SL_sell])
+        return ([SL_buy, SL_sell, TP_buy, TP_sell])
 
     # Relatve Strenght Index (off)
     def RSI(self, SYMBOL):
         self.SYMBOL = SYMBOL
-        df = self.Historical()
+        df = self.Historical(SYMBOL)
         # CALCULATE RSI
         alpha = 1.0 / 14
         gains = df.close.diff()
@@ -160,7 +159,7 @@ class River:
     # SUPPLY & DEMAND using VOLUME (off)
     def Supply_Demand_by_volume(self, SYMBOL):
         self.SYMBOL = SYMBOL
-        df = self.Historical()
+        df = self.Historical(SYMBOL)
         # Create a new column 'range' by subtracting the 'low' column from the 'high' column.
         df["range"] = df["high"] - df["low"]
         # Create a new column 'vwap' by taking the cumulative sum of the product of the 'close' and 'tick_volume' columns divided by the cumulative sum of the 'tick_volume' column.
@@ -217,7 +216,7 @@ class River:
     # SUPPLY & DEMAND using HIGHS and LOWS (off)
     def Supply_Demand_by_candles(self, SYMBOL, Window):
         self.SYMBOL = SYMBOL
-        df = self.Historical()
+        df = self.Historical(SYMBOL)
         # Get the Higher High and the Lower Low 
         df["high_rolling_max"] = df["high"].rolling(window=Window).max()
         df["low_rolling_min"] = df["low"].rolling(window=Window).min()
@@ -234,11 +233,11 @@ class River:
         return df
 
     # THE RIVER (on)
-    def River(self):
+    def River(self, SYMBOL):
         # for SYMBOL in self.symbol_list:
         #     for key, value in SYMBOL.items():
         #         self.SYMBOL = key
-        df = self.Historical()
+        df = self.Historical(SYMBOL)
         # structure the channel
         df['UP'] = df.high.rolling(8).max()
         df['LO'] = df.low.rolling(8).min()
@@ -265,11 +264,11 @@ class River:
         return df
 
     # LIQUIDITY POOL (on)
-    def Liquidity_pool(self):
+    def Liquidity_pool(self, SYMBOL):
         # for SYMBOL in self.symbol_list:
         #     for key, value in SYMBOL.items():
         #         self.SYMBOL = key
-        df = self.Historical()
+        df = self.Historical(SYMBOL)
 
         df['Liquidity'] = (df['close'] * df['tick_volume']) / df['tick_volume'].rolling(window=22).sum()
         df['LIQ'] = df['Liquidity'] * 100
@@ -280,22 +279,24 @@ class River:
     ''' P O S I T I O N   M A N A G E R '''
 
     # OPEN MARKET POSITION (on)
-    def open_market_position(self, s_l, Volume):
+    def open_market_position(self, SYMBOL, s_l, Volume):
         # sell 1 == ask
         # buy 0 == bid
 
-        SL_Buy = self.ATR()[0] #.astype(float)
-        SL_Sell = self.ATR()[1] #.astype(float)
+        SL_Buy = self.ATR(SYMBOL)[0] #.astype(float)
+        SL_Sell = self.ATR(SYMBOL)[1] #.astype(float)
+        TP_Buy = self.ATR(SYMBOL)[2] #.astype(float)
+        TP_Sell = self.ATR(SYMBOL)[3] #.astype(float)
 
         if (s_l == 1):
             request = {
                 "action": mt5.TRADE_ACTION_DEAL,
-                "symbol": self.SYMBOL,
+                "symbol": SYMBOL,
                 "volume": Volume, # FLOAT
                 "type": mt5.ORDER_TYPE_BUY,
-                "price": mt5.symbol_info_tick(self.SYMBOL).bid,
+                "price": mt5.symbol_info_tick(SYMBOL).bid,
                 "sl": SL_Buy, # FLOAT
-                "tp": 0.0, # FLOAT
+                "tp": TP_Buy, # FLOAT
                 "deviation": 20, # INTERGER
                 "magic": self.MAGIC,
                 "comment": self.Comment,
@@ -308,12 +309,12 @@ class River:
         if (s_l == -1):
             request = {
                 "action": mt5.TRADE_ACTION_DEAL,
-                "symbol": self.SYMBOL,
+                "symbol": SYMBOL,
                 "volume": Volume, # FLOAT
                 "type": mt5.ORDER_TYPE_SELL,
-                "price": mt5.symbol_info_tick(self.SYMBOL).ask,
+                "price": mt5.symbol_info_tick(SYMBOL).ask,
                 "sl": SL_Sell, # FLOAT
-                "tp": 0.0, # FLOAT
+                "tp": TP_Sell, # FLOAT
                 "deviation": 20, # INTERGER
                 "magic": self.MAGIC,
                 "comment": self.Comment,
@@ -324,22 +325,22 @@ class River:
             return response
 
     # OPEN LIMIT POSITION (off)
-    def open_limit_position(self, s_l):
+    def open_limit_position(self, SYMBOL, s_l):
         # sell 1 == ask
         # buy 0 == bid
 
-        SL_Buy = self.MINUTE()[9] #.astype(float)
-        SL_Sell = self.MINUTE()[11] #.astype(float)
+        SL_Buy = self.Historical(SYMBOL)[9] #.astype(float)
+        SL_Sell = self.Historical(SYMBOL)[11] #.astype(float)
 
         point = mt5.symbol_info(self.SYMBOL).point 
 
         if (s_l == 1):
             request = {
                 "action": mt5.TRADE_ACTION_PENDING,
-                "symbol": self.SYMBOL,
+                "symbol": SYMBOL,
                 "volume": self.VOLUME, # FLOAT
                 "type": mt5.ORDER_TYPE_BUY_LIMIT,
-                "price": mt5.symbol_info_tick(self.SYMBOL).ask - 10 * point,
+                "price": mt5.symbol_info_tick(SYMBOL).ask - 10 * point,
                 "sl": SL_Buy, # FLOAT
                 "tp": 0.0, # FLOAT
                 "deviation": 20, # INTERGER
@@ -354,10 +355,10 @@ class River:
         if (s_l == -1):
             request = {
                 "action": mt5.TRADE_ACTION_PENDING,
-                "symbol": self.SYMBOL,
+                "symbol": SYMBOL,
                 "volume": self.VOLUME, # FLOAT
                 "type": mt5.ORDER_TYPE_SELL_LIMIT,
-                "price": mt5.symbol_info_tick(self.SYMBOL).bid + 10 * point,
+                "price": mt5.symbol_info_tick(SYMBOL).bid + 10 * point,
                 "sl": SL_Sell, # FLOAT
                 "tp": 0.0, # FLOAT
                 "deviation": 20, # INTERGER
@@ -370,13 +371,13 @@ class River:
             return response
 
     # CLOSE MARKET POSITION (on)
-    def close_position(self, s_l):
+    def close_position(self, SYMBOL, s_l):
         # mt5.positions_get()[0][0]
         
         if (s_l == 1):
             request = {
                 "action": mt5.TRADE_ACTION_DEAL,
-                "symbol": self.SYMBOL,
+                "symbol": SYMBOL,
                 "volume": self.VOLUME, # FLOAT
                 "type": mt5.ORDER_TYPE_BUY,
                 "position": mt5.positions_get(symbol=self.SYMBOL)[0][0],
@@ -395,7 +396,7 @@ class River:
         if (s_l == -1):
             request = {
                 "action": mt5.TRADE_ACTION_DEAL,
-                "symbol": self.SYMBOL,
+                "symbol": SYMBOL,
                 "volume": self.VOLUME, # FLOAT
                 "type": mt5.ORDER_TYPE_SELL,
                 "position": mt5.positions_get(symbol=self.SYMBOL)[0][0],
@@ -498,12 +499,12 @@ class River:
 
     ''' C H E C K   S I G N A L S '''
 
-    def check_signal(self):
+    def check_signal(self, SYMBOL):
         SIGNAL = 0
         CH_LMT = 0.9
-        position_in_channel = self.River()['position_in_channel']
-        HCC = self.River()['HCC']
-        LCC = self.River()['LCC']
+        position_in_channel = self.River(SYMBOL)['position_in_channel']
+        HCC = self.River(SYMBOL)['HCC']
+        LCC = self.River(SYMBOL)['LCC']
         for i in range(1, len(position_in_channel)):
             if position_in_channel[i] >= CH_LMT and position_in_channel[i-1] < CH_LMT and HCC[i] != 0:
                 SIGNAL = 1
@@ -516,13 +517,13 @@ class River:
         return SIGNAL
 
     # CHECK SIGNAL TO OPEN POSITION (on)
-    def check_signal_1(self):
+    def check_signal_1(self, SYMBOL):
         SIGNAL = 0
         CH_LMT = 0.2
-        position_in_channel = self.River()['position_in_channel']
-        HCC = self.River()['HCC']
-        LCC = self.River()['LCC']
-        Liquidity = self.Liquidity_pool()['LIQ']
+        position_in_channel = self.River(SYMBOL)['position_in_channel']
+        HCC = self.River(SYMBOL)['HCC']
+        LCC = self.River(SYMBOL)['LCC']
+        Liquidity = self.Liquidity_pool(SYMBOL)['LIQ']
 
         for M in self.symbol_list:
             for key, value in M.items():
@@ -653,7 +654,7 @@ class River:
                 Openedd = mt5.positions_get(symbol = SYMBOL)
                 Pendingg = mt5.orders_get(symbol= SYMBOL)
 
-                # Close = self.Historical()['close']
+                # Close = self.Historical(SYMBOL)['close']
                 # point = mt5.symbol_info(self.SYMBOL).point 
                 # margin_buy = Close.iloc[-2] - 15 * point
                 # margin_sell =  Close.iloc[-2] + 15 * point
@@ -661,18 +662,18 @@ class River:
                 Tot_Profit = self.Profit_F(SYMBOL)
                 Tot_Len = len(Pendingg) + len(Openedd)
                 # signal_reverse = self.check_reverse_signal(SYMBOL)
-                signal = self.check_signal()
+                signal = self.check_signal(SYMBOL)
 
                 if CLOSE_ALL == False:
                     # LOOKING FOR PATTERN
                     if POSITIONS == '' and len(Openedd) < 1:
                         # try:
                         if signal == 1:
-                            self.open_market_position(1, self.VOLUME)
+                            self.open_market_position(SYMBOL, 1, self.VOLUME)
                             print(f'1L1 - Long Opened {SYMBOL}')
                         
                         elif signal == -1:
-                            self.open_market_position(-1, self.VOLUME)
+                            self.open_market_position(SYMBOL, -1, self.VOLUME)
                             print(f'1S1 - Short Opened {SYMBOL}')
                         # except:
                         #     print('Could not open nuew pos')
@@ -684,20 +685,20 @@ class River:
                 SYMBOL = key
                 POSITIONS = self.get_opened_positions(SYMBOL)
                 # signal_reverse = self.check_reverse_signal(SYMBOL)
-                HCC = self.River()['HCC']
-                LCC = self.River()['LCC']
+                HCC = self.River(SYMBOL)['HCC']
+                LCC = self.River(SYMBOL)['LCC']
                 # print('here')
                 if POSITIONS != '':
                     try:
                         
                         if POSITIONS[0] == 1: # if side is Buy
                             if HCC.iloc[-1] > 0.0:
-                                self.close_position(-1) 
+                                self.close_position(SYMBOL, -1) 
                                 print(f'3L2 - Close Long {SYMBOL} due reverse Signal')
                         
                         elif POSITIONS[0] == -1: # if side id Sell
                             if LCC.iloc[-1] > 0.0:
-                                self.close_position(1) 
+                                self.close_position(SYMBOL, 1) 
                                 print(f'3L2 - Close Short {SYMBOL} due reverse Signal')
 
                     except:
